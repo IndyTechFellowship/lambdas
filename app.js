@@ -5,8 +5,9 @@ const express = require('express')
 const app = express()
 
 app.post('/speakeasy', (req, res) => {
-  log.info(req)
-  res.status(200).send({ status: 'ok' })
+  log.info(req.body)
+  log.info(req.query)
+  res.status(200).send("Great!")
 })
 
 app.listen(process.env.PORT, () => {
