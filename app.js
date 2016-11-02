@@ -38,7 +38,7 @@ const k = new kisi.default()
 app.post('/speakeasy', (req, res) => {
   const { text } = req.body
   const split = text.split(" ")
-  switch (split) {
+  switch (split[0]) {
     case 'help':
       return res.send(printHelp())
   }
