@@ -36,7 +36,7 @@ const kisi = require('kisi-client')
 const k = new kisi.default()
 
 app.post('/speakeasy', (req, res) => {
-  const { text } = req.body
+  const text = req.body.text
   const split = text.split(" ")
   switch (split) {
     case 'help':
