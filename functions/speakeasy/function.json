@@ -1,0 +1,7 @@
+{
+  "description": "provides control over speakeasy access (/speakeasy)",
+  "runtime": "nodejs4.3",
+  "memory": 128,
+  "timeout": 20,
+  "role": "arn:aws:iam::117902882029:role/tfo_slack_lambda_function"
+}

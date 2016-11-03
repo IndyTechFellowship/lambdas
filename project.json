@@ -1,0 +1,9 @@
+{
+  "name": "tfo_slack",
+  "description": "",
+  "memory": 128,
+  "timeout": 5,
+  "role": "arn:aws:iam::117902882029:role/tfo_slack_lambda_function",
+  "environment": {},
+  "defaultEnvironment": "prod"
+}
