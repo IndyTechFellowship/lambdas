@@ -1,6 +1,7 @@
 const _ = require('lodash')
 const async = require('async')
 const aws = require('aws-sdk')
+const marshal = require('dynamodb-marshaler/marshal')
 const moment = require('moment')
 const request = require('request')
 const unmarshalItem = require('dynamodb-marshaler').unmarshalItem
@@ -184,13 +185,24 @@ const CheckCallingUser = (state, done) => {
     return done('Cannot proceed without a recognized user')
   if (!_.get(user, 'speakeasy.enabled')) 
     return done('Rollout of this service is currently limited, and your account is not enabled.')
-  if (_.get(user, 'speakeasy.lastAccess')) {
-    const diff = moment().diff(moment(user.speakeasy.lastAccess), 'seconds')
-    if (diff < 20 && !user.speakeasy.disableRateLimiting) {
-      const remaining = 20 - diff
-      return done(`Requests to this service are limited to one every 20 seconds. Please wait ${remaining} seconds.`)
-    }
-  }
+
+  // Only allow a maximum of 3 attempts per 60 seconds
+  const attempts = _.get(user, 'speakeasy.attempts')
+  const disabled = _.get(user, 'speakeasy.disableRateLimiting')
+  if (!attempts || attempts.length < 3 || disabled) return done(null, state)
+
+  // Otherwise, we need to read in the times and figure out how many 
+  // have happened in the last minute.
+  const lastMinute = _.filter(attempts, (a) => {
+    return moment(a.at).isAfter(moment().subtract(1, 'minute'))
+      && _.includes([ 'checkout', 'status', 'unlock', 'open' ], a.op)
+  })
+  if (lastMinute.length >= 3) 
+    return done(`` + 
+      `Requests to this service are limited to 3 every 60 seconds.\n`+
+      `Please wait for a few seconds and try again.\n` +
+      "This request has not counted against your 3 requests; only successful `checkout`, `status`, and `unlock` requests count.")
+
   return done(null, state)
 }
 
@@ -200,18 +212,28 @@ const CheckCallingUser = (state, done) => {
 // limited the next time
 // ==================================================
 const RegisterUserAttempt = (state, done) => {
+  var previousAttempts = _.get(state, 'user.speakeasy.attempts')
+  if (!previousAttempts) previousAttempts = []
+  previousAttempts.unshift({
+    at: moment().toISOString(),
+    op: state.command,
+  })
+
+  // Only store the last 5 attempts the user has made, to save storage room
+  if (previousAttempts.length > 5) previousAttempts = _.take(previousAttempts, 5)
+
   DynamoDB.updateItem({
     TableName: 'TFoSlackUsers',
     Key: { id: { S: state.user.id } },
-    UpdateExpression: 'set #s.#l = :s',
+    UpdateExpression: 'set #s.#a = :p',
     ExpressionAttributeNames: {
       '#s': 'speakeasy',
-      '#l': 'lastAccess',
+      '#a': 'attempts',
     },
     ExpressionAttributeValues: {
-      ':s': { S: moment().toISOString() },
+      ':p': marshal(previousAttempts),
     },
-  }, (err, resp) => {
+  }, (err) => {
     if (err) {
       console.error(`RegisterUserAttempt :: ${err}`)
       return done(err)
