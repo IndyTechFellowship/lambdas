@@ -324,17 +324,38 @@ const StatusHandler = (state, done) => {
       console.error(err)
       return done('An error occurred... let Mike know.')
     }
-    const message = _.reduce(doorStatuses, (sum, status, i) => {
+    var message = _.reduce(doorStatuses, (sum, status, i) => {
       if (i !== 0) sum += "\n"
       sum += status
       return sum
     }, "")
-    return done(null, ""
+    message = ""
       + "I'm reading the lock statuses as follows\n"
       + "```\n"
       + message + "\n"
       + "```\n"
-      + "If any of those look off, its possible your phone could still work to unlock it, but not guaranteed.")
+    DynamoDB.scan({
+      TableName: 'TFoSlackUsers',
+    }, (err, items) => {
+      if (err) return done(err)
+      const allUsers = items.Items.map(unmarshalItem)
+      // Figure out how many users have active passes and print that as well. 
+      const havePasses = _.filter(allUsers, (u) => moment(u.speakeasy.expires).isAfter(moment()))
+      message += `Right now, there are ${havePasses.length} passes checked out, out of ${N_PASSES} total.\n`
+      const userExpires = state.user.speakeasy.expires
+      if (userExpires) {
+        const inEnglish = moment(userExpires).from(moment())
+        if (moment(userExpires).isBefore(moment())) {
+          message += `Your last pass expired ${inEnglish}. `
+          message += "Run `/speakeasy checkout` to get a new one."
+        } else {
+          message += `You have an active pass which expires ${inEnglish}.`
+        }
+      } else {
+        message += "You haven't checked out a pass yet. Try `/speakeasy checkout` if you'd like one!"
+      }
+      return done(null, message)
+    })
   })
 }
 
