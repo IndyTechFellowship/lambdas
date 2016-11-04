@@ -3,7 +3,6 @@ const async = require('async')
 const aws = require('aws-sdk')
 const moment = require('moment')
 const request = require('request')
-const query = require('querystring')
 const unmarshalItem = require('dynamodb-marshaler').unmarshalItem
 
 const DynamoDB = new aws.DynamoDB()
@@ -17,10 +16,13 @@ const DOOR_CODES = [
   { name: "Downtown Inner", key: 'di', code: '3640' },
 ]
 
+// `event` isn't a normal apig event; its already been parsed by 
+// the apigproxy lambda from the querystring stuff that slack gives 
+// us into a normal json object
 exports.handle = (event, context) => {
 
   // Parse the incoming request
-  const body = query.parse(event.body)
+  const body = event.body
   const textSplit = body.text.split(" ")
 
   // Helper function to respond to the request
@@ -52,8 +54,9 @@ exports.handle = (event, context) => {
   async.waterfall([
     // Initialize state
     (done) => done(null, {
-      command: textSplit[0],
       args: _.tail(textSplit),
+      command: textSplit[0],
+      respond,
       token: body.token,
       user: { id: body.user_id },
     }),
@@ -386,9 +389,19 @@ const CheckoutHandler = (state, done) => {
 // ==================================================
 const UnlockHandler = (state, done) => {
   if (state.args.length < 1) return done('Please provide a door to unlock.')
-  const doorKey = state.args[0]
-  const door = _.find(DOOR_CODES, (c) => c.key === doorKey)
-  if (!door) return done("Sorry, but I don't recognize that door. Please run `/speakeasy help` for more info.")  
+  const doorKey = (() => {
+    if (state.args[0] === 'bw') {
+      return [
+        _.find(DOOR_CODES, (c) => c.key === 'bwo'),
+        _.find(DOOR_CODES, (c) => c.key === 'bwi'),
+      ] 
+    } else {
+      const door = _.find(DOOR_CODES, (c) => c.key === state.args[0])
+      if (!door) return "Sorry, but I don't recognize that door. Please run `/speakeasy help` for more info."
+      return [ door ]
+    }
+  })()
+  if (_.isString(doorKey)) return done(doorKey)
   async.waterfall([
     (stepDone) => {
       if (!state.user.speakeasy.expires) {
@@ -401,15 +414,25 @@ const UnlockHandler = (state, done) => {
       stepDone()
     },
     (stepDone) => {
-      request({
-        url: `https://api.getkisi.com/locks/${door.code}/unlock`,
-        method: 'POST',
-        headers: state.headers,
-      }, (err, resp, body) => stepDone(err, body))
+      async.eachOf(doorKey, (door, i, unlockDone) => {
+        const timeout = i > 0 ? 10000 : 10
+        setTimeout(() => {
+          request({
+            url: `https://api.getkisi.com/locks/${door.code}/unlock`,
+            method: 'POST',
+            headers: state.headers,
+          }, (err, resp, body) => {
+            if (err) console.error(err)
+            const message = err ? err : JSON.parse(body).message
+            state.respond(`${door.name}: ${message}`, (err) => {
+              if (err) console.error(err)
+              return unlockDone()
+            })
+          })
+        }, timeout)
+      }, stepDone)
     },
   ], (err, unlockBody) => {
-    if (err) return done(err)
-    unlockBody = JSON.parse(unlockBody)
-    return done(null, unlockBody.message)
+    return done(err)
   })
 }

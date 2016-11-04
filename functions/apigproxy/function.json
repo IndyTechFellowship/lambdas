@@ -1,0 +1,7 @@
+{
+  "description": "proxy between slack/apig and a lambda function",
+  "runtime": "nodejs4.3",
+  "memory": 128,
+  "timeout": 10,
+  "role": "arn:aws:iam::117902882029:role/tfo_slack_lambda_function"
+}
