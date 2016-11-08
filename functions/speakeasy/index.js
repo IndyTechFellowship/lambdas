@@ -17,14 +17,17 @@ const DOOR_CODES = [
   { name: "Downtown Inner", key: 'di', code: '3640' },
 ]
 
-// `event` isn't a normal apig event; its already been parsed by 
+// `event` isn't a normal slack+apig event; its already been parsed by 
 // the apigproxy lambda from the querystring stuff that slack gives 
 // us into a normal json object
 exports.handle = (event, context) => {
 
   // Parse the incoming request
   const body = event.body
-  const textSplit = body.text.split(" ")
+  if (!body) {
+    console.error('No body provided')
+    return 
+  }
 
   // Helper function to respond to the request
   const finish = () => {
@@ -44,6 +47,7 @@ exports.handle = (event, context) => {
   }
 
   // Identify if there's an error or if the request is a simple help request
+  const textSplit = body.text.split(" ")
   if (textSplit.length === 0) {
     return genericError(() => finish())
   }
@@ -55,8 +59,8 @@ exports.handle = (event, context) => {
   async.waterfall([
     // Initialize state
     (done) => done(null, {
-      args: _.tail(textSplit),
-      command: textSplit[0],
+      args: textSplit,
+      command: body.command,
       respond,
       token: body.token,
       user: { id: body.user_id },
@@ -80,6 +84,7 @@ exports.handle = (event, context) => {
     // the command the user entered
     GetDispatchHandler,
   ], (err, message) => {
+    if (err) console.error(err)
     return respond(err || message, () => finish())
   })
 }
@@ -331,9 +336,7 @@ const StatusHandler = (state, done) => {
     }, "")
     message = ""
       + "I'm reading the lock statuses as follows\n"
-      + "```\n"
       + message + "\n"
-      + "```\n"
     DynamoDB.scan({
       TableName: 'TFoSlackUsers',
     }, (err, items) => {
@@ -372,10 +375,13 @@ const GetDoorStatus = (state) => {
     }, (err, resp, body) => {
       if (err) {
         console.error(err)
-        return doorDone(null, `${door.name} [${door.key}]:\n A bad error occurred.`)
+        return doorDone(null, `:warning: ${door.name} [\`${door.key}\`]: \`A bad error occurred.\``)
       }
       body = JSON.parse(body)
-      return doorDone(null, `${door.name} [${door.key}]:\n ${body.message}`)
+      const emoji = body.message === 'Access not restricted!'
+        ? ':+1:'
+        : ':no_good:'
+      return doorDone(null, `${emoji} ${door.name} [\`${door.key}\`]: \`${body.message}\``)
     })
   }
 }
@@ -439,7 +445,7 @@ const UnlockHandler = (state, done) => {
         _.find(DOOR_CODES, (c) => c.key === 'bwi'),
       ] 
     } else {
-      const door = _.find(DOOR_CODES, (c) => c.key === state.args[0])
+      const door = _.find(DOOR_CODES, (c) => c.key === state.args[0].toLowerCase())
       if (!door) return "Sorry, but I don't recognize that door. Please run `/speakeasy help` for more info."
       return [ door ]
     }
