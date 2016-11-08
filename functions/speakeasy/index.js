@@ -59,8 +59,8 @@ exports.handle = (event, context) => {
   async.waterfall([
     // Initialize state
     (done) => done(null, {
-      args: textSplit,
-      command: body.command,
+      args: _.tail(textSplit),
+      command: textSplit[0],
       respond,
       token: body.token,
       user: { id: body.user_id },
@@ -344,7 +344,9 @@ const StatusHandler = (state, done) => {
       const allUsers = items.Items.map(unmarshalItem)
       // Figure out how many users have active passes and print that as well. 
       const havePasses = _.filter(allUsers, (u) => moment(u.speakeasy.expires).isAfter(moment()))
-      message += `Right now, there are ${havePasses.length} passes checked out, out of ${N_PASSES} total.\n`
+      const prefix = havePasses.length === 1 ? 'is' : 'are'
+      const postfix = havePasses.length === 1 ? 'pass' : 'passes'
+      message += `Right now, there ${prefix} ${havePasses.length} ${postfix} checked out, out of ${N_PASSES} total.\n`
       const userExpires = state.user.speakeasy.expires
       if (userExpires) {
         const inEnglish = moment(userExpires).from(moment())
