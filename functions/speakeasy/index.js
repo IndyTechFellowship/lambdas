@@ -123,7 +123,7 @@ const GetHelp = () => {
     + "Most functionality of this app is rate-limited to 3 requests per 60 seconds.\n"
     + "Please keep in mind that you may stay in the SpeakEasy 24/7, but the doors to get in do lock for the night.\n"
 	+ " - Downtown: 6pm\n"
-	+ " - Brod Ripple: 10pm\n"
+	+ " - Broad Ripple: 10pm\n"
 	+ "`/speakeasy status` will reflect the doors being closed\n"
     + "Contact Mike with any questions or concerns."
 }
